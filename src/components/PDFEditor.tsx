@@ -824,44 +824,54 @@ export default function PDFEditor() {
           viewport: viewport,
         } as any).promise;
         
-        // Draw strokes on top
+        // Draw strokes on a separate canvas to handle eraser properly
         const strokes = pageStrokes[i] || [];
-        strokes.forEach(stroke => {
-          if (stroke.points.length < 2) return;
+        if (strokes.length > 0) {
+          const strokeCanvas = document.createElement('canvas');
+          strokeCanvas.width = viewport.width;
+          strokeCanvas.height = viewport.height;
+          const strokeCtx = strokeCanvas.getContext('2d');
           
-          ctx.beginPath();
-          ctx.moveTo(stroke.points[0].x * exportScale, stroke.points[0].y * exportScale);
-          
-          if (stroke.points.length === 2) {
-            ctx.lineTo(stroke.points[1].x * exportScale, stroke.points[1].y * exportScale);
-          } else {
-            for (let j = 1; j < stroke.points.length - 1; j++) {
-              const xc = (stroke.points[j].x + stroke.points[j + 1].x) / 2;
-              const yc = (stroke.points[j].y + stroke.points[j + 1].y) / 2;
-              ctx.quadraticCurveTo(
-                stroke.points[j].x * exportScale, stroke.points[j].y * exportScale,
-                xc * exportScale, yc * exportScale
-              );
-            }
-            const lastPoint = stroke.points[stroke.points.length - 1];
-            ctx.lineTo(lastPoint.x * exportScale, lastPoint.y * exportScale);
+          if (strokeCtx) {
+            strokes.forEach(stroke => {
+              if (stroke.points.length < 2) return;
+              
+              strokeCtx.beginPath();
+              strokeCtx.moveTo(stroke.points[0].x * exportScale, stroke.points[0].y * exportScale);
+              
+              if (stroke.points.length === 2) {
+                strokeCtx.lineTo(stroke.points[1].x * exportScale, stroke.points[1].y * exportScale);
+              } else {
+                for (let j = 1; j < stroke.points.length - 1; j++) {
+                  const xc = (stroke.points[j].x + stroke.points[j + 1].x) / 2;
+                  const yc = (stroke.points[j].y + stroke.points[j + 1].y) / 2;
+                  strokeCtx.quadraticCurveTo(
+                    stroke.points[j].x * exportScale, stroke.points[j].y * exportScale,
+                    xc * exportScale, yc * exportScale
+                  );
+                }
+                const lastPoint = stroke.points[stroke.points.length - 1];
+                strokeCtx.lineTo(lastPoint.x * exportScale, lastPoint.y * exportScale);
+              }
+              
+              if (stroke.tool === 'eraser') {
+                strokeCtx.globalCompositeOperation = 'destination-out';
+                strokeCtx.lineWidth = stroke.size * 5 * exportScale;
+              } else {
+                strokeCtx.globalCompositeOperation = 'source-over';
+                strokeCtx.strokeStyle = stroke.color;
+                strokeCtx.lineWidth = stroke.size * exportScale;
+              }
+              
+              strokeCtx.lineCap = 'round';
+              strokeCtx.lineJoin = 'round';
+              strokeCtx.stroke();
+            });
+            
+            // Draw the strokes canvas onto the main canvas
+            ctx.drawImage(strokeCanvas, 0, 0);
           }
-          
-          if (stroke.tool === 'eraser') {
-            // Eraser on a flattened image just draws white (or background color)
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = stroke.size * 5 * exportScale;
-          } else {
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.strokeStyle = stroke.color;
-            ctx.lineWidth = stroke.size * exportScale;
-          }
-          
-          ctx.lineCap = 'round';
-          ctx.lineJoin = 'round';
-          ctx.stroke();
-        });
+        }
         
         const jpegDataUrl = tempCanvas.toDataURL('image/jpeg', 0.95);
         const jpegImage = await newPdfDoc.embedJpg(jpegDataUrl);
