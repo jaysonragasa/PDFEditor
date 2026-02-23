@@ -511,8 +511,20 @@ export default function PDFEditor() {
     e.preventDefault();
     
     const coords = getCoordinates(e);
-    const normalizedCoords = { x: coords.x / scale, y: coords.y / scale };
-    const newPoints = [...currentStroke.points, normalizedCoords];
+    const rawCoords = { x: coords.x / scale, y: coords.y / scale };
+    
+    // Stabilizer: Exponential Moving Average
+    let smoothedCoords = rawCoords;
+    if (currentStroke.points.length > 0) {
+      const lastPoint = currentStroke.points[currentStroke.points.length - 1];
+      const smoothingFactor = 0.5; // 0.5 means 50% old point, 50% new point
+      smoothedCoords = {
+        x: lastPoint.x * smoothingFactor + rawCoords.x * (1 - smoothingFactor),
+        y: lastPoint.y * smoothingFactor + rawCoords.y * (1 - smoothingFactor)
+      };
+    }
+
+    const newPoints = [...currentStroke.points, smoothedCoords];
     const updatedStroke = { ...currentStroke, points: newPoints };
     setCurrentStroke(updatedStroke);
     
@@ -522,7 +534,7 @@ export default function PDFEditor() {
     ctx.beginPath();
     const prevPoint = currentStroke.points[currentStroke.points.length - 1];
     ctx.moveTo(prevPoint.x * scale, prevPoint.y * scale);
-    ctx.lineTo(normalizedCoords.x * scale, normalizedCoords.y * scale);
+    ctx.lineTo(smoothedCoords.x * scale, smoothedCoords.y * scale);
     
     if (currentTool === 'eraser') {
       ctx.globalCompositeOperation = 'destination-out';
@@ -614,8 +626,19 @@ export default function PDFEditor() {
       ctx.beginPath();
       ctx.moveTo(stroke.points[0].x * scale, stroke.points[0].y * scale);
       
-      for (let i = 1; i < stroke.points.length; i++) {
-        ctx.lineTo(stroke.points[i].x * scale, stroke.points[i].y * scale);
+      if (stroke.points.length === 2) {
+        ctx.lineTo(stroke.points[1].x * scale, stroke.points[1].y * scale);
+      } else {
+        for (let i = 1; i < stroke.points.length - 1; i++) {
+          const xc = (stroke.points[i].x + stroke.points[i + 1].x) / 2;
+          const yc = (stroke.points[i].y + stroke.points[i + 1].y) / 2;
+          ctx.quadraticCurveTo(
+            stroke.points[i].x * scale, stroke.points[i].y * scale,
+            xc * scale, yc * scale
+          );
+        }
+        const lastPoint = stroke.points[stroke.points.length - 1];
+        ctx.lineTo(lastPoint.x * scale, lastPoint.y * scale);
       }
       
       if (stroke.tool === 'eraser') {
@@ -809,8 +832,19 @@ export default function PDFEditor() {
           ctx.beginPath();
           ctx.moveTo(stroke.points[0].x * exportScale, stroke.points[0].y * exportScale);
           
-          for (let j = 1; j < stroke.points.length; j++) {
-            ctx.lineTo(stroke.points[j].x * exportScale, stroke.points[j].y * exportScale);
+          if (stroke.points.length === 2) {
+            ctx.lineTo(stroke.points[1].x * exportScale, stroke.points[1].y * exportScale);
+          } else {
+            for (let j = 1; j < stroke.points.length - 1; j++) {
+              const xc = (stroke.points[j].x + stroke.points[j + 1].x) / 2;
+              const yc = (stroke.points[j].y + stroke.points[j + 1].y) / 2;
+              ctx.quadraticCurveTo(
+                stroke.points[j].x * exportScale, stroke.points[j].y * exportScale,
+                xc * exportScale, yc * exportScale
+              );
+            }
+            const lastPoint = stroke.points[stroke.points.length - 1];
+            ctx.lineTo(lastPoint.x * exportScale, lastPoint.y * exportScale);
           }
           
           if (stroke.tool === 'eraser') {
@@ -1185,6 +1219,10 @@ export default function PDFEditor() {
                   ref={sigCanvasRef} 
                   penColor="black"
                   clearOnResize={false}
+                  velocityFilterWeight={0.9}
+                  minWidth={1.5}
+                  maxWidth={3.5}
+                  minDistance={2}
                   canvasProps={{
                     width: sigCanvasSize.width, 
                     height: sigCanvasSize.height, 
