@@ -3,7 +3,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import { PDFDocument, rgb } from 'pdf-lib';
-import { Download, ChevronLeft, ChevronRight, PenTool, Eraser, Trash2, Upload, ZoomIn, ZoomOut, Hand, Type, Image as ImageIcon, Pen } from 'lucide-react';
+import { Download, ChevronLeft, ChevronRight, PenTool, Eraser, Trash2, Upload, ZoomIn, ZoomOut, Hand, Type, Image as ImageIcon, Pen, X } from 'lucide-react';
 import { Rnd } from 'react-rnd';
 import SignatureCanvas from 'react-signature-canvas';
 
@@ -250,6 +250,8 @@ export default function PDFEditor() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [fileName, setFileName] = useState('edited_document.pdf');
   const [isExporting, setIsExporting] = useState(false);
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [password, setPassword] = useState('');
@@ -325,6 +327,22 @@ export default function PDFEditor() {
     } catch (error) {
       console.error("Error loading PDF:", error);
     }
+  };
+
+  const closePdf = () => {
+    setPdfFile(null);
+    setPdfFileBytes(null);
+    setPdfDoc(null);
+    setNumPages(0);
+    setCurrentPage(1);
+    setPageStrokes({});
+    setPageTexts({});
+    setPageImages({});
+    setSelectedObjectId(null);
+    setSuccessfulPassword(undefined);
+    setPassword('');
+    setPasswordError(false);
+    setFileName('edited_document.pdf');
   };
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
@@ -1014,20 +1032,60 @@ export default function PDFEditor() {
             </div>
 
             <button
-              onClick={() => setShowExportModal(true)}
+              onClick={() => {
+                if (successfulPassword) {
+                  setAlertMessage("Note: This document was opened with a password. The exported PDF will NOT contain a password, as re-encrypting PDFs is not currently supported.");
+                  setShowAlertModal(true);
+                } else {
+                  setShowExportModal(true);
+                }
+              }}
               className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-colors shadow-sm text-sm shrink-0"
             >
               <Download size={18} />
               <span className="hidden sm:inline">Export</span>
             </button>
+            <button
+              onClick={closePdf}
+              className="flex items-center gap-2 px-3 py-2 bg-white border border-neutral-300 text-neutral-700 rounded-lg hover:bg-neutral-50 font-medium transition-colors shadow-sm text-sm shrink-0"
+              title="Close PDF"
+            >
+              <X size={18} />
+              <span className="hidden sm:inline">Close</span>
+            </button>
           </div>
         )}
       </header>
+
+      {showAlertModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+            <h2 className="text-xl font-semibold text-neutral-800 mb-4">Notice</h2>
+            <p className="text-neutral-700 mb-6">{alertMessage}</p>
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  setShowAlertModal(false);
+                  setShowExportModal(true);
+                }}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showExportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
             <h2 className="text-xl font-semibold text-neutral-800 mb-4">Export PDF</h2>
+            {successfulPassword && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                <strong>Note:</strong> This document was opened with a password. The exported PDF will <strong>not</strong> contain a password, as re-encrypting PDFs is not currently supported.
+              </div>
+            )}
             <div className="mb-6">
               <label className="block text-sm font-medium text-neutral-700 mb-2">
                 File Name
