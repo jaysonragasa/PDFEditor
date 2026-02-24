@@ -3,7 +3,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import { PDFDocument, rgb } from 'pdf-lib';
-import { Download, ChevronLeft, ChevronRight, PenTool, Eraser, Trash2, Upload, ZoomIn, ZoomOut, Hand, Type, Image as ImageIcon, Pen, X } from 'lucide-react';
+import { Download, ChevronLeft, ChevronRight, PenTool, Eraser, Trash2, Upload, ZoomIn, ZoomOut, Hand, Type, Image as ImageIcon, Pen, X, Moon, Sun, Copy } from 'lucide-react';
 import { Rnd } from 'react-rnd';
 import SignatureCanvas from 'react-signature-canvas';
 
@@ -46,7 +46,7 @@ const hexToRgb = (hex: string) => {
   } : { r: 0, g: 0, b: 0 };
 };
 
-const TextOverlay = ({ textObj, scale, visualScale, isSelected, onSelect, onChange, onDelete }: {
+const TextOverlay = ({ textObj, scale, visualScale, isSelected, onSelect, onChange, onDelete, onCopy }: {
   key?: string;
   textObj: TextObject;
   scale: number;
@@ -55,6 +55,7 @@ const TextOverlay = ({ textObj, scale, visualScale, isSelected, onSelect, onChan
   onSelect: () => void;
   onChange: (t: TextObject) => void;
   onDelete: () => void;
+  onCopy: () => void;
 }) => {
   const [isEditing, setIsEditing] = useState(textObj.text === 'Type here');
 
@@ -88,13 +89,24 @@ const TextOverlay = ({ textObj, scale, visualScale, isSelected, onSelect, onChan
       bounds="parent"
     >
       {isSelected && !isEditing && (
-        <button 
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="absolute -top-3 -right-3 bg-red-500 text-white rounded-full p-1.5 shadow-md z-50 hover:bg-red-600"
-          onTouchEnd={(e) => { e.stopPropagation(); onDelete(); }}
-        >
-          <Trash2 size={14} />
-        </button>
+        <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-2 bg-white dark:bg-neutral-800 shadow-md rounded-lg p-1 z-50 border border-neutral-200 dark:border-neutral-700">
+          <button 
+            onClick={(e) => { e.stopPropagation(); onCopy(); }}
+            onTouchEnd={(e) => { e.stopPropagation(); onCopy(); }}
+            className="p-1.5 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded transition-colors"
+            title="Copy"
+          >
+            <Copy size={16} />
+          </button>
+          <button 
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            onTouchEnd={(e) => { e.stopPropagation(); onDelete(); }}
+            className="p-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
+            title="Delete"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
       )}
       {isEditing ? (
         <textarea
@@ -144,7 +156,7 @@ const TextOverlay = ({ textObj, scale, visualScale, isSelected, onSelect, onChan
   );
 };
 
-const ImageOverlay = ({ imgObj, scale, visualScale, isSelected, onSelect, onChange, onDelete }: {
+const ImageOverlay = ({ imgObj, scale, visualScale, isSelected, onSelect, onChange, onDelete, onCopy }: {
   key?: string;
   imgObj: ImageObject;
   scale: number;
@@ -153,6 +165,7 @@ const ImageOverlay = ({ imgObj, scale, visualScale, isSelected, onSelect, onChan
   onSelect: () => void;
   onChange: (t: ImageObject) => void;
   onDelete: () => void;
+  onCopy: () => void;
 }) => {
   return (
     <Rnd
@@ -182,13 +195,24 @@ const ImageOverlay = ({ imgObj, scale, visualScale, isSelected, onSelect, onChan
       bounds="parent"
     >
       {isSelected && (
-        <button 
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="absolute -top-3 -right-3 bg-red-500 text-white rounded-full p-1.5 shadow-md z-50 hover:bg-red-600"
-          onTouchEnd={(e) => { e.stopPropagation(); onDelete(); }}
-        >
-          <Trash2 size={14} />
-        </button>
+        <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-2 bg-white dark:bg-neutral-800 shadow-md rounded-lg p-1 z-50 border border-neutral-200 dark:border-neutral-700">
+          <button 
+            onClick={(e) => { e.stopPropagation(); onCopy(); }}
+            onTouchEnd={(e) => { e.stopPropagation(); onCopy(); }}
+            className="p-1.5 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded transition-colors"
+            title="Copy"
+          >
+            <Copy size={16} />
+          </button>
+          <button 
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            onTouchEnd={(e) => { e.stopPropagation(); onDelete(); }}
+            className="p-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
+            title="Delete"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
       )}
       <img 
         src={imgObj.dataUrl} 
@@ -246,6 +270,85 @@ export default function PDFEditor() {
   useEffect(() => {
     setPanOffset({ x: 0, y: 0 });
   }, [currentPage]);
+
+  const [clipboard, setClipboard] = useState<{type: 'text' | 'image', data: any} | null>(null);
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
+
+  const handleCopy = () => {
+    if (selectedObjectId) {
+      const textObj = pageTexts[currentPage]?.find(t => t.id === selectedObjectId);
+      if (textObj) {
+        setClipboard({ type: 'text', data: textObj });
+        return;
+      }
+      const imgObj = pageImages[currentPage]?.find(i => i.id === selectedObjectId);
+      if (imgObj) {
+        setClipboard({ type: 'image', data: imgObj });
+        return;
+      }
+    }
+  };
+
+  const handlePaste = () => {
+    if (clipboard) {
+      if (clipboard.type === 'text') {
+        const newText = { ...clipboard.data, id: Date.now().toString(), x: clipboard.data.x + 20, y: clipboard.data.y + 20 };
+        setPageTexts(prev => ({
+          ...prev,
+          [currentPage]: [...(prev[currentPage] || []), newText]
+        }));
+        setSelectedObjectId(newText.id);
+      } else if (clipboard.type === 'image') {
+        const newImg = { ...clipboard.data, id: Date.now().toString(), x: clipboard.data.x + 20, y: clipboard.data.y + 20 };
+        setPageImages(prev => ({
+          ...prev,
+          [currentPage]: [...(prev[currentPage] || []), newImg]
+        }));
+        setSelectedObjectId(newImg.id);
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        handleCopy();
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        handlePaste();
+      }
+      
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedObjectId) {
+          setPageTexts(prev => ({
+            ...prev,
+            [currentPage]: (prev[currentPage] || []).filter(t => t.id !== selectedObjectId)
+          }));
+          setPageImages(prev => ({
+            ...prev,
+            [currentPage]: (prev[currentPage] || []).filter(i => i.id !== selectedObjectId)
+          }));
+          setSelectedObjectId(null);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedObjectId, clipboard, currentPage, pageTexts, pageImages]);
 
   const [showExportModal, setShowExportModal] = useState(false);
   const [fileName, setFileName] = useState('edited_document.pdf');
@@ -943,27 +1046,35 @@ export default function PDFEditor() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-neutral-100 font-sans overflow-hidden">
-      <header className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 bg-white border-b border-neutral-200 shadow-sm z-10 gap-3">
+    <div className="flex flex-col h-screen bg-neutral-100 dark:bg-neutral-900 font-sans overflow-hidden transition-colors">
+      <header className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 bg-white dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700 shadow-sm z-10 gap-3 transition-colors">
         <div className="flex items-center justify-between w-full sm:w-auto gap-4">
-          <h1 className="text-xl font-semibold text-neutral-800 hidden sm:block">PDF Editor</h1>
+          <h1 className="text-xl font-semibold text-neutral-800 dark:text-neutral-100 hidden sm:block">PDF Editor</h1>
           
+          <button
+            onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')}
+            className="p-2 rounded text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
+            title="Toggle Theme"
+          >
+            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+          </button>
+
           {pdfDoc && (
-            <div className="flex items-center gap-1 bg-neutral-100 p-1 rounded-lg">
+            <div className="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-700 p-1 rounded-lg">
               <button 
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="p-1 rounded hover:bg-white disabled:opacity-50 transition-colors"
+                className="p-1 rounded hover:bg-white dark:hover:bg-neutral-600 disabled:opacity-50 transition-colors dark:text-neutral-200"
               >
                 <ChevronLeft size={18} />
               </button>
-              <span className="text-sm font-medium px-2 min-w-[3rem] text-center">
+              <span className="text-sm font-medium px-2 min-w-[3rem] text-center dark:text-neutral-200">
                 {currentPage} / {numPages}
               </span>
               <button 
                 onClick={() => setCurrentPage(p => Math.min(numPages, p + 1))}
                 disabled={currentPage === numPages}
-                className="p-1 rounded hover:bg-white disabled:opacity-50 transition-colors"
+                className="p-1 rounded hover:bg-white dark:hover:bg-neutral-600 disabled:opacity-50 transition-colors dark:text-neutral-200"
                 title="Next Page"
               >
                 <ChevronRight size={18} />
@@ -972,20 +1083,20 @@ export default function PDFEditor() {
           )}
 
           {pdfDoc && (
-            <div className="flex items-center gap-1 bg-neutral-100 p-1 rounded-lg">
+            <div className="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-700 p-1 rounded-lg">
               <button 
                 onClick={() => setScale(s => Math.max(0.5, s - 0.25))}
-                className="p-1 rounded hover:bg-white transition-colors"
+                className="p-1 rounded hover:bg-white dark:hover:bg-neutral-600 transition-colors dark:text-neutral-200"
                 title="Zoom Out"
               >
                 <ZoomOut size={18} />
               </button>
-              <span className="text-sm font-medium px-1 min-w-[2.5rem] text-center">
+              <span className="text-sm font-medium px-1 min-w-[2.5rem] text-center dark:text-neutral-200">
                 {Math.round(scale * 100)}%
               </span>
               <button 
                 onClick={() => setScale(s => Math.min(3, s + 0.25))}
-                className="p-1 rounded hover:bg-white transition-colors"
+                className="p-1 rounded hover:bg-white dark:hover:bg-neutral-600 transition-colors dark:text-neutral-200"
                 title="Zoom In"
               >
                 <ZoomIn size={18} />
@@ -996,24 +1107,24 @@ export default function PDFEditor() {
 
         {pdfDoc && (
           <div className="flex flex-wrap items-center justify-center gap-2 w-full sm:w-auto">
-            <div className="flex items-center gap-1 bg-neutral-100 p-1 rounded-lg overflow-x-auto max-w-full">
+            <div className="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-700 p-1 rounded-lg overflow-x-auto max-w-full">
               <button
                 onClick={() => setCurrentTool('pan')}
-                className={`p-2 rounded transition-colors shrink-0 ${currentTool === 'pan' ? 'bg-white shadow-sm text-indigo-600' : 'text-neutral-600 hover:bg-white/50'}`}
+                className={`p-2 rounded transition-colors shrink-0 ${currentTool === 'pan' ? 'bg-white dark:bg-neutral-600 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-neutral-600 dark:text-neutral-300 hover:bg-white/50 dark:hover:bg-neutral-600/50'}`}
                 title="Pan Tool"
               >
                 <Hand size={18} />
               </button>
               <button
                 onClick={() => setCurrentTool('text')}
-                className={`p-2 rounded transition-colors shrink-0 ${currentTool === 'text' ? 'bg-white shadow-sm text-indigo-600' : 'text-neutral-600 hover:bg-white/50'}`}
+                className={`p-2 rounded transition-colors shrink-0 ${currentTool === 'text' ? 'bg-white dark:bg-neutral-600 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-neutral-600 dark:text-neutral-300 hover:bg-white/50 dark:hover:bg-neutral-600/50'}`}
                 title="Text Tool"
               >
                 <Type size={18} />
               </button>
               <button
                 onClick={() => imageInputRef.current?.click()}
-                className={`p-2 rounded transition-colors shrink-0 text-neutral-600 hover:bg-white/50`}
+                className={`p-2 rounded transition-colors shrink-0 text-neutral-600 dark:text-neutral-300 hover:bg-white/50 dark:hover:bg-neutral-600/50`}
                 title="Insert Image"
               >
                 <ImageIcon size={18} />
@@ -1027,26 +1138,26 @@ export default function PDFEditor() {
               </button>
               <button
                 onClick={() => setShowSignatureModal(true)}
-                className={`p-2 rounded transition-colors shrink-0 text-neutral-600 hover:bg-white/50`}
+                className={`p-2 rounded transition-colors shrink-0 text-neutral-600 dark:text-neutral-300 hover:bg-white/50 dark:hover:bg-neutral-600/50`}
                 title="Insert Signature"
               >
                 <Pen size={18} />
               </button>
               <button
                 onClick={() => setCurrentTool('pen')}
-                className={`p-2 rounded transition-colors shrink-0 ${currentTool === 'pen' ? 'bg-white shadow-sm text-indigo-600' : 'text-neutral-600 hover:bg-white/50'}`}
+                className={`p-2 rounded transition-colors shrink-0 ${currentTool === 'pen' ? 'bg-white dark:bg-neutral-600 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-neutral-600 dark:text-neutral-300 hover:bg-white/50 dark:hover:bg-neutral-600/50'}`}
                 title="Pen Tool"
               >
                 <PenTool size={18} />
               </button>
               <button
                 onClick={() => setCurrentTool('eraser')}
-                className={`p-2 rounded transition-colors shrink-0 ${currentTool === 'eraser' ? 'bg-white shadow-sm text-indigo-600' : 'text-neutral-600 hover:bg-white/50'}`}
+                className={`p-2 rounded transition-colors shrink-0 ${currentTool === 'eraser' ? 'bg-white dark:bg-neutral-600 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-neutral-600 dark:text-neutral-300 hover:bg-white/50 dark:hover:bg-neutral-600/50'}`}
                 title="Eraser"
               >
                 <Eraser size={18} />
               </button>
-              <div className="w-px h-6 bg-neutral-300 mx-1 shrink-0" />
+              <div className="w-px h-6 bg-neutral-300 dark:bg-neutral-600 mx-1 shrink-0" />
               <input 
                 type="color" 
                 value={color} 
@@ -1061,14 +1172,14 @@ export default function PDFEditor() {
                 max="20" 
                 value={brushSize} 
                 onChange={e => setBrushSize(parseInt(e.target.value))}
-                className="w-16 sm:w-24 mx-1 accent-indigo-600 shrink-0"
+                className="w-16 sm:w-24 mx-1 accent-indigo-600 dark:accent-indigo-400 shrink-0"
                 disabled={currentTool === 'pan' || currentTool === 'text'}
                 title="Brush Size"
               />
-              <div className="w-px h-6 bg-neutral-300 mx-1 shrink-0" />
+              <div className="w-px h-6 bg-neutral-300 dark:bg-neutral-600 mx-1 shrink-0" />
               <button
                 onClick={clearPage}
-                className="p-2 rounded text-red-600 hover:bg-red-50 transition-colors shrink-0"
+                className="p-2 rounded text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors shrink-0"
                 title="Clear Page"
               >
                 <Trash2 size={18} />
@@ -1091,7 +1202,7 @@ export default function PDFEditor() {
             </button>
             <button
               onClick={closePdf}
-              className="flex items-center gap-2 px-3 py-2 bg-white border border-neutral-300 text-neutral-700 rounded-lg hover:bg-neutral-50 font-medium transition-colors shadow-sm text-sm shrink-0"
+              className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 text-neutral-700 dark:text-neutral-200 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-700 font-medium transition-colors shadow-sm text-sm shrink-0"
               title="Close PDF"
             >
               <X size={18} />
@@ -1218,16 +1329,19 @@ export default function PDFEditor() {
       )}
 
       {showSignatureModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl h-[80vh] flex flex-col">
-            <div className="p-4 border-b border-neutral-200">
-              <h2 className="text-lg font-semibold text-neutral-800">Draw Signature</h2>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl w-full max-w-2xl h-[90vh] sm:h-[80vh] flex flex-col">
+            <div className="p-3 border-b border-neutral-200 dark:border-neutral-700 flex justify-between items-center">
+              <h2 className="text-base font-semibold text-neutral-800 dark:text-neutral-100">Draw Signature</h2>
+              <button onClick={() => setShowSignatureModal(false)} className="text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+                <X size={20} />
+              </button>
             </div>
-            <div className="flex-1 bg-neutral-50 p-4 overflow-hidden">
-              <div ref={sigWrapperRef} className="w-full h-full bg-white rounded-lg border border-neutral-300 shadow-inner overflow-hidden">
+            <div className="flex-1 bg-neutral-50 dark:bg-neutral-900 p-2 overflow-hidden">
+              <div ref={sigWrapperRef} className="w-full h-full bg-white dark:bg-neutral-800 rounded-lg border border-neutral-300 dark:border-neutral-700 shadow-inner overflow-hidden">
                 <SignatureCanvas 
                   ref={sigCanvasRef} 
-                  penColor="black"
+                  penColor={theme === 'dark' ? 'white' : 'black'}
                   clearOnResize={false}
                   velocityFilterWeight={0.9}
                   minWidth={1.5}
@@ -1241,27 +1355,19 @@ export default function PDFEditor() {
                 />
               </div>
             </div>
-            <div className="p-4 border-t border-neutral-200 flex justify-between items-center bg-white">
+            <div className="p-3 border-t border-neutral-200 dark:border-neutral-700 flex justify-between items-center bg-white dark:bg-neutral-800">
               <button
                 onClick={() => sigCanvasRef.current?.clear()}
-                className="px-4 py-2 text-neutral-600 hover:bg-neutral-100 rounded-lg transition-colors text-sm font-medium"
+                className="px-3 py-1.5 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors text-sm font-medium"
               >
                 Clear
               </button>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowSignatureModal(false)}
-                  className="px-4 py-2 text-neutral-600 hover:bg-neutral-100 rounded-lg transition-colors text-sm font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSignatureInsert}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
-                >
-                  Insert
-                </button>
-              </div>
+              <button
+                onClick={handleSignatureInsert}
+                className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+              >
+                Insert
+              </button>
             </div>
           </div>
         </div>
@@ -1269,7 +1375,7 @@ export default function PDFEditor() {
 
       <main 
         ref={containerRef} 
-        className="flex-1 overflow-hidden bg-neutral-100 flex items-center justify-center relative touch-none"
+        className="flex-1 overflow-hidden bg-neutral-100 dark:bg-neutral-900 flex items-center justify-center relative touch-none transition-colors"
         onWheel={handleWheel}
       >
         {!pdfDoc ? (
@@ -1326,6 +1432,10 @@ export default function PDFEditor() {
                     [currentPage]: prev[currentPage].filter(t => t.id !== textObj.id)
                   }));
                 }}
+                onCopy={() => {
+                  setClipboard({ type: 'text', data: textObj });
+                  handlePaste();
+                }}
               />
             ))}
             {pageImages[currentPage]?.map(imgObj => (
@@ -1347,6 +1457,10 @@ export default function PDFEditor() {
                     ...prev,
                     [currentPage]: prev[currentPage].filter(t => t.id !== imgObj.id)
                   }));
+                }}
+                onCopy={() => {
+                  setClipboard({ type: 'image', data: imgObj });
+                  handlePaste();
                 }}
               />
             ))}
